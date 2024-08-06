@@ -1,39 +1,89 @@
-import { useRef, useState } from 'react'
+import { useRef, useState, useEffect } from 'react'
 import { Canvas, useFrame } from '@react-three/fiber'
-import { OrbitControls } from '@react-three/drei'
+import { OrbitControls, ContactShadows, Environment, useGLTF } from '@react-three/drei'
+import { proxy, useSnapshot } from 'valtio';
+import { HexColorPicker } from 'react-colorful';
 
-function Box(props) {
-  // This reference gives us direct access to the THREE.Mesh object
-  const ref = useRef()
-  // Hold state for hovered and clicked events
-  const [hovered, hover] = useState(false)
-  const [clicked, click] = useState(false)
-  // Subscribe this component to the render-loop, rotate the mesh every frame
-  useFrame((state, delta) => (ref.current.rotation.x += delta))
-  // Return the view, these are regular Threejs elements expressed in JSX
-  return (
-    <mesh
-      {...props}
-      ref={ref}
-      scale={clicked ? 1.5 : 1}
-      onClick={(event) => click(!clicked)}
-      onPointerOver={(event) => (event.stopPropagation(), hover(true))}
-      onPointerOut={(event) => hover(false)}>
-      <boxGeometry args={[1, 1, 1]} />
-      <meshStandardMaterial color={hovered ? 'hotpink' : 'orange'} />
-    </mesh>
-  )
-}
+const state = proxy({
+  current: null,
+  items: {
+    laces: "#fff",
+    mesh: "#fff",
+    caps: "#fff",
+    inner: "#fff",
+    sole: "#fff",
+    stripes: "#fff",
+    band: "#fff",
+    patch: "#fff"
+  },
+})
+
 
 export default function App() {
   return (
-    <Canvas>
-      <ambientLight intensity={Math.PI / 2} />
-      <spotLight position={[10, 10, 10]} angle={0.15} penumbra={1} decay={0} intensity={Math.PI} />
-      <pointLight position={[-10, -10, -10]} decay={0} intensity={Math.PI} />
-      <Box position={[-1.2, 0, 0]} />
-      <Box position={[1.2, 0, 0]} />
-      <OrbitControls />
-    </Canvas>
+    <>
+
+      <Canvas camera={{ position: [0, 0, 4] }} color='blue'>
+        <ambientLight intensity={0.3} />
+        <spotLight intensity={0.3} angle={0.1} penumbra={1} position={[10, 15, 10]} castShadow />
+        <ShoeModel ></ShoeModel>
+        <Environment preset="city" />
+        <ContactShadows frames={1} scale={10} opacity={.25} position={[0, -1, 0]}></ContactShadows>
+        <OrbitControls minPolarAngle={Math.PI / 2} maxPolarAngle={Math.PI / 2} />
+      </Canvas >
+      <Picker></Picker>
+
+    </>
   )
 }
+
+
+function Picker() {
+  const snap = useSnapshot(state);
+  return (<div style={{ display: snap.current ? "block" : "none" }}>
+    <HexColorPicker className="picker" color={snap.items[snap.current]} onChange={(color) => (state.items[snap.current] = color)} />
+    <h1>{snap.current}</h1>
+  </div>)
+}
+
+
+function ShoeModel(props) {
+  const { nodes, materials } = useGLTF('/shoe.glb')
+  const [hovered, setHovered] = useState(null)
+  const snap = useSnapshot(state);
+  const ref = useRef();
+  useFrame(state => {
+    console.log('frame', ref)
+    const t = state.clock.getElapsedTime();
+    ref.current.rotation.set(Math.cos(t / 4) / 8, Math.sin(t / 4) / 8, -0.2 - (1 + Math.sin(t / 1.5)) / 20)
+    ref.current.position.y = (1 + Math.sin(t / 3)) / 4
+  })
+
+  useEffect(() => {
+    const cursor = `<svg width="64" height="64" fill="none" xmlns="http://www.w3.org/2000/svg"><g clip-path="url(#clip0)"><path fill="rgba(255, 255, 255, 0.5)" d="M29.5 54C43.031 54 54 43.031 54 29.5S43.031 5 29.5 5 5 15.969 5 29.5 15.969 54 29.5 54z" stroke="#000"/><g filter="url(#filter0_d)"><path d="M29.5 47C39.165 47 47 39.165 47 29.5S39.165 12 29.5 12 12 19.835 12 29.5 19.835 47 29.5 47z" fill="${snap.items[hovered]}"/></g><path d="M2 2l11 2.947L4.947 13 2 2z" fill="#000"/><text fill="#000" style="#fff-space:pre" font-family="Inter var, sans-serif" font-size="10" letter-spacing="-.01em"><tspan x="35" y="63">${hovered}</tspan></text></g><defs><clipPath id="clip0"><path fill="#fff" d="M0 0h64v64H0z"/></clipPath><filter id="filter0_d" x="6" y="8" width="47" height="47" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feColorMatrix in="SourceAlpha" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0"/><feOffset dy="2"/><feGaussianBlur stdDeviation="3"/><feColorMatrix values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.15 0"/><feBlend in2="BackgroundImageFix" result="effect1_dropShadow"/><feBlend in="SourceGraphic" in2="effect1_dropShadow" result="shape"/></filter></defs></svg>`
+    const auto = `<svg width="64" height="64" fill="none" xmlns="http://www.w3.org/2000/svg"><path fill="rgba(255, 255, 255, 0.5)" d="M29.5 54C43.031 54 54 43.031 54 29.5S43.031 5 29.5 5 5 15.969 5 29.5 15.969 54 29.5 54z" stroke="#000"/><path d="M2 2l11 2.947L4.947 13 2 2z" fill="#000"/></svg>`
+    if (hovered) {
+      document.body.style.cursor = `url('data:image/svg+xml;base64,${btoa(cursor)}'), auto`
+      return () => (document.body.style.cursor = `url('data:image/svg+xml;base64,${btoa(auto)}'), auto`)
+    }
+  }, [hovered])
+
+  return (
+    <group ref={ref} {...props}
+      onPointerOver={(e) => (e.stopPropagation(), setHovered(e.object.material.name))}
+      onPointerOut={(e) => e.intersections.length === 0 && setHovered(null)}
+      onPointerMissed={() => (state.current = null)}
+      onClick={(e) => (e.stopPropagation(), (state.current = e.object.material.name))}
+      dispose={null}>
+      <mesh material-color={snap.items.laces} geometry={nodes.shoe.geometry} material={materials.laces} />
+      <mesh material-color={snap.items.mesh} geometry={nodes.shoe_1.geometry} material={materials.mesh} />
+      <mesh material-color={snap.items.caps} geometry={nodes.shoe_2.geometry} material={materials.caps} />
+      <mesh material-color={snap.items.inner} geometry={nodes.shoe_3.geometry} material={materials.inner} />
+      <mesh material-color={snap.items.sole} geometry={nodes.shoe_4.geometry} material={materials.sole} />
+      <mesh material-color={snap.items.stripes} geometry={nodes.shoe_5.geometry} material={materials.stripes} />
+      <mesh material-color={snap.items.band} geometry={nodes.shoe_6.geometry} material={materials.band} />
+      <mesh material-color={snap.items.patch} geometry={nodes.shoe_7.geometry} material={materials.patch} />
+    </group>
+  )
+}
+
